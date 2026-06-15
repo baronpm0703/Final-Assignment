@@ -1,10 +1,12 @@
 from dataclasses import dataclass
 from typing import Any
 
+from src.agents.prompts import load_data_agent_system_prompt
 from src.agents.tools import SqlExecutor
 from src.core.errors import AppError, ErrorCode
 from src.domain.intent import Intent, IntentResult, Language
 from src.domain.response import AgentResponse, Visualization
+from src.infrastructure.llm.ports import ChatCompletionPort, ChatMessage, ChatRequest
 from src.rag.knowledge_service import KnowledgeService, RetrievedChunk
 from src.router.intent_router import IntentRouter
 from src.utils.formatting import compact_table, percent, seconds
@@ -25,10 +27,16 @@ class DataAgent:
         router: IntentRouter,
         knowledge_service: KnowledgeService,
         database: SqlExecutor,
+        llm: ChatCompletionPort,
+        llm_model: str,
+        system_prompt: str | None = None,
     ) -> None:
         self.router = router
         self.knowledge_service = knowledge_service
         self.database = database
+        self.llm = llm
+        self.llm_model = llm_model
+        self.system_prompt = system_prompt or load_data_agent_system_prompt()
 
     def answer(self, message: str, *, memory_context: str | None = None) -> AgentResponse:
         route = self.router.route(message)
@@ -64,14 +72,59 @@ class DataAgent:
 
         retrieval_query = f"{memory_context}\n\n{message}" if memory_context else message
         knowledge = self.knowledge_service.retrieve(retrieval_query, limit=4)
+        llm_note = self._reason_with_llm(
+            message=message,
+            route=route,
+            knowledge=knowledge,
+            memory_context=memory_context,
+        )
         plan = self._plan_sql(message, route, knowledge)
         if plan is None:
-            return self._clarify_metric(route.language)
+            response = self._clarify_metric(route.language)
+            return AgentResponse(
+                type=response.type,
+                answer=response.answer,
+                language=response.language,
+                visualization=response.visualization,
+                sql_executed=response.sql_executed,
+                reasoning_steps=[*response.reasoning_steps, llm_note],
+                options=response.options,
+            )
 
         rows, sql_executed, retry_steps = self._execute_with_retry(plan.sql)
         return self._format_response(
-            route.language, plan, rows, knowledge, sql_executed, retry_steps
+            route.language, plan, rows, knowledge, sql_executed, [llm_note, *retry_steps]
         )
+
+    def _reason_with_llm(
+        self,
+        *,
+        message: str,
+        route: IntentResult,
+        knowledge: list[RetrievedChunk],
+        memory_context: str | None,
+    ) -> str:
+        knowledge_context = "\n\n".join(f"[{chunk.title}]\n{chunk.content}" for chunk in knowledge)
+        user_prompt = (
+            f"Detected language: {route.language.value}\n"
+            f"Intent: {route.intent.value}\n"
+            f"Router reason: {route.reason}\n\n"
+            f"Conversation memory:\n{memory_context or '(none)'}\n\n"
+            f"Retrieved knowledge:\n{knowledge_context or '(none)'}\n\n"
+            f"User question:\n{message}\n\n"
+            "Return concise reasoning for the SQL/query plan. Do not execute SQL."
+        )
+        response = self.llm.complete(
+            ChatRequest(
+                model=self.llm_model,
+                messages=[
+                    ChatMessage(role="system", content=self.system_prompt),
+                    ChatMessage(role="user", content=user_prompt),
+                ],
+                temperature=0.0,
+            )
+        )
+        return f"LLM reasoning generated with {response.model}: {response.content[:200]}"
 
     def _plan_sql(
         self,

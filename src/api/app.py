@@ -5,16 +5,20 @@ from src.api.routes import router
 from src.core.config import Settings, get_settings
 from src.core.logging import configure_logging
 from src.infrastructure.database import Database
+from src.infrastructure.llm.registry import ProviderRegistry
 from src.memory.conversation_memory import ConversationMemory
 from src.rag.knowledge_service import KnowledgeService
 from src.router.intent_router import IntentRouter
 
 
 def build_default_agent(settings: Settings) -> DataAgent:
+    llm = ProviderRegistry(settings).get_chat_provider(settings.llm_model)
     return DataAgent(
         router=IntentRouter.default(),
         knowledge_service=KnowledgeService.from_markdown(),
         database=Database.from_settings(settings),
+        llm=llm,
+        llm_model=settings.llm_model,
     )
 
 

@@ -11,6 +11,7 @@ FastAPI service for call center analytics over PostgreSQL. The implementation fo
 - Markdown knowledge base with deterministic offline retrieval
 - Intent router for `data_query`, `out_of_scope`, `chitchat`, and unsafe input
 - Data agent with RAG retrieval, validated SQL execution, response formatting, and visualization metadata
+- Data agent system prompt at `prompts/data_agent_system.md`
 - Conversation memory with recent window, compaction, and summary cache
 - PostgreSQL schema, mock data, read-only role, and `kb_chunks` pgvector table
 - Unit and integration tests
@@ -66,9 +67,10 @@ Key environment variables:
 - `MEMORY_WINDOW_SIZE`
 
 Default LLM mode is `mock:offline`, so local tests do not call external APIs.
+The data agent still calls the configured LLM provider in this mode; the mock provider returns
+an offline reasoning note while preserving the same prompt flow.
 
 ## Notes
 
 SSE streaming is intentionally deferred. The MVP returns non-streaming JSON with
 `answer`, `visualization`, `sql_executed`, and `reasoning_steps`.
-
