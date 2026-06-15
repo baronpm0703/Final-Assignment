@@ -1,0 +1,22 @@
+{
+  "data_query": [
+    "Phan tich chi so Abandon theo tung thang tu 1.2026-3.2026",
+    "Hom qua cac cuoc goi den co yeu cau nao cao nhat",
+    "Top agent theo nang suat",
+    "Average talk duration by agent",
+    "SLA20 thang nay"
+  ],
+  "out_of_scope": [
+    "Hom qua giai ngan bao nhieu hop dong",
+    "Thoi tiet hom nay the nao",
+    "Gia vang hom nay",
+    "Viet code frontend"
+  ],
+  "chitchat": [
+    "Xin chao",
+    "Cam on",
+    "Ban la ai",
+    "Hello"
+  ]
+}
+
