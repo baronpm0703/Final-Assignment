@@ -36,3 +36,25 @@ class ConfigResponse(BaseModel):
     llm_model: str
     sql_max_limit: int
     sql_default_limit: int
+
+
+# --- Conversation management models ---
+
+
+class CreateConversationResponse(BaseModel):
+    conversation_id: str
+
+
+class ConversationListResponse(BaseModel):
+    conversations: list[str]
+
+
+class MessageResponse(BaseModel):
+    role: str
+    content: str
+    created_at: str
+
+
+class ConversationMessagesResponse(BaseModel):
+    conversation_id: str
+    messages: list[MessageResponse]

@@ -1,6 +1,17 @@
+import uuid
+
 from fastapi import APIRouter, HTTPException, Request
 
-from src.api.models import ChatRequest, ChatResponse, ConfigResponse, HealthResponse
+from src.api.models import (
+    ChatRequest,
+    ChatResponse,
+    ConfigResponse,
+    ConversationListResponse,
+    ConversationMessagesResponse,
+    CreateConversationResponse,
+    HealthResponse,
+    MessageResponse,
+)
 from src.core.errors import AppError, ErrorCode
 from src.domain.response import AgentResponse
 
@@ -24,6 +35,56 @@ def config(request: Request) -> ConfigResponse:
         sql_max_limit=settings.sql_max_limit,
         sql_default_limit=settings.sql_default_limit,
     )
+
+
+# --- Conversation management ---
+
+
+@router.post("/conversations", response_model=CreateConversationResponse, status_code=201)
+def create_conversation(request: Request) -> CreateConversationResponse:
+    """Create a new chat session and return its ID."""
+    memory = request.app.state.memory
+    conversation_id = uuid.uuid4().hex[:16]
+    memory.create(conversation_id)
+    return CreateConversationResponse(conversation_id=conversation_id)
+
+
+@router.get("/conversations", response_model=ConversationListResponse)
+def list_conversations(request: Request) -> ConversationListResponse:
+    """List all active conversation IDs."""
+    memory = request.app.state.memory
+    return ConversationListResponse(conversations=memory.list_conversations())
+
+
+@router.get("/conversations/{conversation_id}/messages", response_model=ConversationMessagesResponse)
+def get_conversation_messages(conversation_id: str, request: Request) -> ConversationMessagesResponse:
+    """Get the message history for a conversation."""
+    memory = request.app.state.memory
+    if not memory.exists(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    messages = memory.get_messages(conversation_id)
+    return ConversationMessagesResponse(
+        conversation_id=conversation_id,
+        messages=[
+            MessageResponse(
+                role=msg.role,
+                content=msg.content,
+                created_at=msg.created_at.isoformat(),
+            )
+            for msg in messages
+        ],
+    )
+
+
+@router.delete("/conversations/{conversation_id}", status_code=204)
+def delete_conversation(conversation_id: str, request: Request) -> None:
+    """Delete a conversation and its history."""
+    memory = request.app.state.memory
+    if not memory.delete(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+
+# --- Chat ---
 
 
 @router.post("/chat", response_model=ChatResponse)

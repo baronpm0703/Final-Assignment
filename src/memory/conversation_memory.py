@@ -54,6 +54,26 @@ class ConversationMemory:
             ConversationMessage(role=role, content=content)
         )
 
+    def exists(self, conversation_id: str) -> bool:
+        return conversation_id in self._messages
+
+    def create(self, conversation_id: str) -> None:
+        """Create an empty conversation slot. Idempotent."""
+        self._messages.setdefault(conversation_id, [])
+
+    def list_conversations(self) -> list[str]:
+        return list(self._messages.keys())
+
+    def get_messages(self, conversation_id: str) -> list[ConversationMessage]:
+        return list(self._messages.get(conversation_id, []))
+
+    def delete(self, conversation_id: str) -> bool:
+        """Delete a conversation and its summary. Returns True if it existed."""
+        existed = conversation_id in self._messages
+        self._messages.pop(conversation_id, None)
+        self._summary_cache.pop(conversation_id, None)
+        return existed
+
     def build_context(self, conversation_id: str) -> MemoryContext:
         messages = self._messages.get(conversation_id, [])
         if len(messages) <= self.window_size:
