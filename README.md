@@ -19,11 +19,12 @@ FastAPI service for call center analytics over PostgreSQL. The implementation fo
 ## Setup
 
 ```bash
-python3 -m pip install -e ".[dev]"
+uv sync --extra dev
 cp .env.example .env
 ```
 
-The project targets Python 3.11+.
+The project targets Python 3.11+. Use `uv run ...` or the Makefile commands so imports resolve
+from the project root and the uv-managed `.venv`.
 
 ## Run Tests
 

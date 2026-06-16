@@ -1,9 +1,12 @@
-.PHONY: install test test-unit test-integration lint format dev docker-up docker-down init-db ingest
+.PHONY: install sync test test-unit test-integration lint format dev docker-up docker-down init-db ingest
 
-PYTHON ?= python3
+UV ?= uv
+PYTHON ?= $(UV) run python
 
-install:
-	$(PYTHON) -m pip install -e ".[dev]"
+install: sync
+
+sync:
+	$(UV) sync --extra dev
 
 test:
 	$(PYTHON) -m pytest
@@ -31,7 +34,7 @@ docker-down:
 	docker compose down
 
 init-db:
-	$(PYTHON) scripts/init_db.py
+	$(PYTHON) -m scripts.init_db
 
 ingest:
-	$(PYTHON) scripts/ingest_kb.py
+	$(PYTHON) -m scripts.ingest_kb
