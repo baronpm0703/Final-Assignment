@@ -29,7 +29,13 @@ class PgVectorKnowledgeStore:
                     },
                 )
 
-    def search(self, query_embedding: list[float], *, limit: int = 5) -> list[RetrievedChunk]:
+    def search(
+        self,
+        query_embedding: list[float],
+        *,
+        limit: int = 5,
+        query: str = "",
+    ) -> list[RetrievedChunk]:
         with self.engine.connect() as connection:
             rows = connection.execute(
                 text(

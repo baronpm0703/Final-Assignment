@@ -7,11 +7,13 @@ FastAPI service for call center analytics over PostgreSQL. The implementation fo
 
 - FastAPI API: `/api/health`, `/api/config`, `/api/chat`
 - Pydantic settings from `.env`
-- Provider-agnostic LLM registry with mock, OpenAI, and Gemini adapters
+- Provider-agnostic LLM registry with OpenAI and Gemini adapters
 - Markdown knowledge base with deterministic offline retrieval
 - Intent router for `data_query`, `out_of_scope`, `chitchat`, and unsafe input
 - Data agent with RAG retrieval, validated SQL execution, response formatting, and visualization metadata
 - Data agent system prompt at `prompts/data_agent_system.md`
+- AgentScope 2.x ReAct runtime via `agentscope.agent.Agent`, `ReActConfig`, and `Toolkit`
+- Domain manifest at `config/domain.yaml` to keep business-specific metadata outside Python code
 - Conversation memory with recent window, compaction, and summary cache
 - PostgreSQL schema, mock data, read-only role, and `kb_chunks` pgvector table
 - Unit and integration tests
@@ -58,6 +60,7 @@ curl -X POST http://localhost:8000/api/chat \
 
 Key environment variables:
 
+- `DOMAIN_CONFIG_PATH`
 - `DATABASE_URL`
 - `DATABASE_READONLY_URL`
 - `SQL_MAX_LIMIT`
@@ -67,9 +70,22 @@ Key environment variables:
 - `GEMINI_API_KEY`
 - `MEMORY_WINDOW_SIZE`
 
-Default LLM mode is `mock:offline`, so local tests do not call external APIs.
-The data agent still calls the configured LLM provider in this mode; the mock provider returns
-an offline reasoning note while preserving the same prompt flow.
+Default LLM mode is `openai:gpt-4o-mini`. Set `OPENAI_API_KEY` for OpenAI models or
+`GEMINI_API_KEY` for Gemini models before starting the API.
+
+The scoped data flow uses AgentScope's ReAct loop:
+
+```text
+route intent -> AgentScope Agent -> retrieve_knowledge tool
+             -> answer_business_question or execute_sql tool
+             -> final API response
+```
+
+`config/domain.yaml` is the manifest that points the generic workflow at the active
+business domain. It defines the active knowledge folder, system prompt file, SQL schema
+whitelist, router keywords, offline demo query plans, and clarification options. To adapt
+the chatbot to another business, change `domain.yaml`, `knowledge/`, `prompts/`, and the
+database schema/init files without changing the Python workflow code.
 
 ## Notes
 

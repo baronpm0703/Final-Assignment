@@ -4,26 +4,12 @@ from src.core.config import Settings
 from src.core.errors import AppError, ErrorCode
 from src.infrastructure.llm.gemini_provider import GeminiChatProvider
 from src.infrastructure.llm.openai_provider import OpenAIChatProvider
-from src.infrastructure.llm.ports import ChatCompletionPort, ChatRequest, ChatResponse
+from src.infrastructure.llm.ports import ChatCompletionPort
 
 ALLOWED_MODELS: dict[str, set[str]] = {
-    "mock": {"offline"},
     "openai": {"gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1"},
-    "gemini": {"gemini-2.5-flash", "gemini-2.5-pro"},
+    "gemini": {"gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash"},
 }
-
-
-class MockChatProvider:
-    def complete(self, request: ChatRequest) -> ChatResponse:
-        last_user_message = next(
-            (message.content for message in reversed(request.messages) if message.role == "user"),
-            "",
-        )
-        return ChatResponse(
-            content=f"Mock response for: {last_user_message}",
-            model=request.model,
-            raw={"provider": "mock"},
-        )
 
 
 ProviderBuilder = Callable[[Settings], ChatCompletionPort]
@@ -34,7 +20,6 @@ class ProviderRegistry:
         self.settings = settings
         self._providers: dict[str, ChatCompletionPort] = {}
         self._builders: dict[str, ProviderBuilder] = {
-            "mock": lambda _: MockChatProvider(),
             "openai": self._build_openai,
             "gemini": self._build_gemini,
         }

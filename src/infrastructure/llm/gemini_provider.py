@@ -1,9 +1,12 @@
+import logging
 from typing import Any
 
 import httpx
 
 from src.core.errors import AppError, ErrorCode
 from src.infrastructure.llm.ports import ChatRequest, ChatResponse
+
+logger = logging.getLogger(__name__)
 
 
 class GeminiChatProvider:
@@ -40,6 +43,14 @@ class GeminiChatProvider:
         if system_instruction:
             payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
+        logger.debug(
+            "llm_provider_request",
+            extra={
+                "provider": "gemini",
+                "model": request.model,
+                "payload": payload,
+            },
+        )
         try:
             response = httpx.post(
                 f"{self.base_url}/models/{model_name}:generateContent",
@@ -49,9 +60,21 @@ class GeminiChatProvider:
             )
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            logger.warning(
+                "llm_provider_request_failed",
+                extra={"provider": "gemini", "model": request.model, "error": str(exc)},
+            )
             raise AppError(ErrorCode.LLM_REQUEST_FAILED, str(exc)) from exc
 
         data = response.json()
+        logger.debug(
+            "llm_provider_response",
+            extra={
+                "provider": "gemini",
+                "model": request.model,
+                "response": data,
+            },
+        )
         parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
         content = "\n".join(part.get("text", "") for part in parts)
         return ChatResponse(content=content, model=request.model, raw=data)

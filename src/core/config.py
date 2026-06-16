@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, PostgresDsn, field_validator
@@ -9,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = "Call Center Analytics Agent"
     app_env: Literal["local", "test", "prod"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    domain_config_path: Path = Path("config/domain.yaml")
 
     database_url: PostgresDsn = Field(
         default="postgresql+psycopg://callcenter:callcenter@localhost:5432/callcenter"
@@ -20,8 +22,8 @@ class Settings(BaseSettings):
     sql_max_limit: int = 1000
     sql_default_limit: int = 100
 
-    llm_provider: Literal["mock", "openai", "gemini"] = "mock"
-    llm_model: str = "mock:offline"
+    llm_provider: Literal["openai", "gemini"] = "openai"
+    llm_model: str = "openai:gpt-4o-mini"
     openai_api_key: str | None = None
     gemini_api_key: str | None = None
 

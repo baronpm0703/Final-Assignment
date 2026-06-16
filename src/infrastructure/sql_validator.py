@@ -5,45 +5,6 @@ from sqlglot import exp
 
 from src.core.errors import AppError, ErrorCode
 
-ALLOWED_SCHEMA: dict[str, set[str]] = {
-    "distribution_call": {
-        "call_id",
-        "calling_number",
-        "call_type",
-        "queue",
-        "agent_id",
-        "call_start",
-        "call_end",
-        "waiting_queue_dur",
-        "ring_dur",
-        "talk_dur",
-        "wrapup_dur",
-        "hold_dur",
-        "call_dur",
-        "agent_disconnect",
-    },
-    "call_log": {
-        "call_id",
-        "request_id",
-        "request_code",
-        "create_date",
-        "create_agent",
-        "detail",
-    },
-    "request_code": {"code", "name", "description"},
-    "agent": {"agent_id", "agent_name", "agent_tl"},
-    "abandoned_call": {
-        "call_id",
-        "abd_id",
-        "abandoned_time",
-        "abandoned_type",
-        "waiting_dur",
-        "ring_dur",
-        "call_dur",
-        "agent_id",
-    },
-}
-
 ALLOWED_FUNCTIONS = {
     "avg",
     "cast",
@@ -75,7 +36,7 @@ class SqlValidator:
         allowed_functions: set[str] | None = None,
         max_limit: int = 1000,
     ) -> None:
-        self.allowed_schema = allowed_schema or ALLOWED_SCHEMA
+        self.allowed_schema = allowed_schema or {}
         self.allowed_functions = allowed_functions or ALLOWED_FUNCTIONS
         self.max_limit = max_limit
 
@@ -163,11 +124,16 @@ class SqlValidator:
 
     def _validate_functions(self, statement: exp.Expression) -> None:
         for function in statement.find_all(exp.Func):
+            # Skip logical connectors (AND, OR, XOR) and predicates (EXISTS) —
+            # these are SQL operators, not user-callable functions.
+            if isinstance(function, (exp.Connector, exp.Predicate)):
+                continue
             function_name = function.sql_name().lower()
             if function_name not in self.allowed_functions:
                 raise AppError(
                     ErrorCode.SQL_FUNCTION_NOT_ALLOWED,
-                    f"Function '{function_name}' is not allowed.",
+                    f"Function '{function_name}' is not allowed. "
+                    f"Allowed: {sorted(self.allowed_functions)}",
                 )
 
     def _validate_limit(self, statement: exp.Select) -> int:

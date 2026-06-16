@@ -19,7 +19,7 @@ class FakeAgent:
 
 def make_client() -> TestClient:
     app = create_app(
-        Settings(app_env="test"),
+        Settings(app_env="test", llm_provider="openai", llm_model="openai:gpt-4o-mini"),
         agent=FakeAgent(),  # type: ignore[arg-type]
         memory=ConversationMemory(),
     )
@@ -37,7 +37,7 @@ def test_config_endpoint() -> None:
     response = make_client().get("/api/config")
 
     assert response.status_code == 200
-    assert response.json()["llm_model"] == "mock:offline"
+    assert response.json()["llm_model"] == "openai:gpt-4o-mini"
 
 
 def test_chat_endpoint() -> None:

@@ -72,17 +72,38 @@ class InMemoryKnowledgeStore:
     def upsert(self, chunks: list[KnowledgeChunk]) -> None:
         self.chunks = chunks
 
-    def search(self, query_embedding: list[float], *, limit: int = 5) -> list[RetrievedChunk]:
+    def search(
+        self,
+        query_embedding: list[float],
+        *,
+        limit: int = 5,
+        query: str = "",
+    ) -> list[RetrievedChunk]:
+        query_tokens = self._tokens(query)
         scored = [
             RetrievedChunk(
                 source=chunk.source,
                 title=chunk.title,
                 content=chunk.content,
-                score=cosine_similarity(query_embedding, chunk.embedding),
+                score=cosine_similarity(query_embedding, chunk.embedding)
+                + self._lexical_score(query_tokens, chunk),
             )
             for chunk in self.chunks
         ]
         return sorted(scored, key=lambda chunk: chunk.score, reverse=True)[:limit]
+
+    def _lexical_score(self, query_tokens: set[str], chunk: KnowledgeChunk) -> float:
+        if not query_tokens:
+            return 0.0
+        haystack = f"{chunk.title} {chunk.content}"
+        chunk_tokens = self._tokens(haystack)
+        overlap = len(query_tokens & chunk_tokens)
+        exact_bonus = sum(1 for token in query_tokens if token in haystack.lower())
+        return overlap * 0.08 + exact_bonus * 0.02
+
+    def _tokens(self, text: str) -> set[str]:
+        normalized = "".join(char.lower() if char.isalnum() else " " for char in text)
+        return {token for token in normalized.split() if token}
 
 
 class KnowledgeService:
@@ -100,4 +121,4 @@ class KnowledgeService:
     def retrieve(self, query: str, *, limit: int = 5) -> list[RetrievedChunk]:
         if not query.strip():
             return []
-        return self.store.search(self.embedder.embed(query), limit=limit)
+        return self.store.search(self.embedder.embed(query), limit=limit, query=query)

@@ -1,18 +1,28 @@
 import pytest
 
 from src.core.errors import AppError, ErrorCode
+from src.domain.config import get_domain_config
 from src.infrastructure.sql_validator import SqlValidator
 
 
+def make_validator(max_limit: int = 1000) -> SqlValidator:
+    domain_config = get_domain_config()
+    return SqlValidator(
+        allowed_schema=domain_config.schema.allowed_schema,
+        allowed_functions=domain_config.schema.allowed_function_set,
+        max_limit=max_limit,
+    )
+
+
 def assert_error_code(sql: str, code: ErrorCode) -> None:
-    validator = SqlValidator(max_limit=1000)
+    validator = make_validator(max_limit=1000)
     with pytest.raises(AppError) as exc_info:
         validator.validate(sql)
     assert exc_info.value.code == code
 
 
 def test_allows_basic_select_with_limit() -> None:
-    validated = SqlValidator().validate(
+    validated = make_validator().validate(
         """
         SELECT call_id, calling_number, call_start
         FROM distribution_call
@@ -27,7 +37,7 @@ def test_allows_basic_select_with_limit() -> None:
 
 
 def test_allows_join_and_metric_functions() -> None:
-    validated = SqlValidator().validate(
+    validated = make_validator().validate(
         """
         SELECT
             DATE_TRUNC('month', d.call_start) AS month,

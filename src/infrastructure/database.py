@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from src.core.config import Settings, get_settings
+from src.domain.config import DomainConfig, get_domain_config
 from src.infrastructure.sql_validator import SqlValidator
 
 
@@ -18,11 +19,20 @@ class Database:
         self.validator = validator
 
     @classmethod
-    def from_settings(cls, settings: Settings | None = None) -> "Database":
+    def from_settings(
+        cls,
+        settings: Settings | None = None,
+        domain_config: DomainConfig | None = None,
+    ) -> "Database":
         settings = settings or get_settings()
+        domain_config = domain_config or get_domain_config(str(settings.domain_config_path))
         database_url = str(settings.database_readonly_url or settings.database_url)
         engine = create_database_engine(database_url)
-        validator = SqlValidator(max_limit=settings.sql_max_limit)
+        validator = SqlValidator(
+            allowed_schema=domain_config.schema.allowed_schema,
+            allowed_functions=domain_config.schema.allowed_function_set,
+            max_limit=settings.sql_max_limit,
+        )
         return cls(engine=engine, validator=validator)
 
     def execute_select(
