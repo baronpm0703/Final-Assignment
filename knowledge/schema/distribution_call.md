@@ -2,16 +2,28 @@
 
 Bang `distribution_call` luu toan bo cuoc goi duoc he thong phan bo cho tong dai.
 
-Cot chinh:
-- `call_id`: khoa chinh cua cuoc goi.
-- `calling_number`: so dien thoai khach hang.
-- `call_type`: `Inbound` hoac `Outbound`.
-- `queue`: nhanh IVR/line khach hang chon, co the null voi outbound.
-- `agent_id`: agent xu ly, join sang `agent.agent_id`.
-- `call_start`, `call_end`: thoi gian bat dau va ket thuc.
-- `waiting_queue_dur`, `ring_dur`, `talk_dur`, `wrapup_dur`, `hold_dur`, `call_dur`: thoi luong tinh bang giay.
-- `agent_disconnect`: agent ngat may truoc hay khong.
+| Column             | Type        | Description                                      |
+|--------------------|-------------|--------------------------------------------------|
+| `call_id`          | TEXT (PK)   | Ma cuoc goi duy nhat (vd: '100001')              |
+| `calling_number`   | TEXT        | So dien thoai khach hang                         |
+| `call_type`        | TEXT        | `'Inbound'` hoac `'Outbound'`                    |
+| `queue`            | TEXT (NULL) | Queue/line khach hang chon: '1'-'5', NULL voi Outbound |
+| `agent_id`         | TEXT (FK)   | Agent xu ly, join sang `agent.agent_id`           |
+| `call_start`       | TIMESTAMPTZ | Thoi gian bat dau cuoc goi                       |
+| `call_end`         | TIMESTAMPTZ | Thoi gian ket thuc cuoc goi                      |
+| `waiting_queue_dur`| INTEGER     | Giay khach cho trong hang doi                    |
+| `ring_dur`         | INTEGER     | Giay chuong truoc khi tra loi                    |
+| `talk_dur`         | INTEGER     | Giay agent noi chuyen voi khach                  |
+| `wrapup_dur`       | INTEGER     | Giay agent xu ly sau cuoc goi                    |
+| `hold_dur`         | INTEGER     | Giay khach bi giu may                            |
+| `call_dur`         | INTEGER     | Tong thoi luong cuoc goi (giay)                  |
+| `agent_disconnect` | BOOLEAN     | TRUE neu agent ngat may truoc                    |
+
+Luu y:
+- Du lieu hien tai: 3000 cuoc goi (2800 Inbound, 200 Outbound).
+- Pham vi thoi gian: 2026-01-01 den 2026-05-19.
+- Queue chi co gia tri voi cuoc goi Inbound, NULL voi Outbound.
+- 30 agent (A001-A030) chia cho 4 team leader (TL_A, TL_B, TL_C, TL_D).
 
 Dung bang nay lam denominator cho tong so cuoc goi, SLA20, average talk time,
-agent productivity va first call resolution.
-
+agent productivity va cac chi so hieu suat.

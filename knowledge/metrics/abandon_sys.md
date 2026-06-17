@@ -1,10 +1,33 @@
-# Metric: Abandon_SYS
+# Metric: Abandon_SYS (System Abandon Rate)
 
-Abandon_SYS la ti le cuoc goi nho tren tong cuoc goi duoc phan bo.
+Abandon_SYS la ti le cuoc goi nho tren tong cuoc goi Inbound duoc phan bo.
 
-Formula:
-`COUNT(DISTINCT abandoned_call.call_id) / COUNT(DISTINCT distribution_call.call_id)`
+## Formula
 
-Khi phan tich theo thang, group theo `DATE_TRUNC('month', distribution_call.call_start)`.
-Dung `LEFT JOIN abandoned_call` de giu denominator la tat ca cuoc goi.
+```sql
+SELECT
+    COUNT(DISTINCT a.call_id)::numeric
+    / NULLIF(COUNT(DISTINCT d.call_id), 0) AS abandon_sys
+FROM distribution_call d
+LEFT JOIN abandoned_call a ON a.call_id = d.call_id
+WHERE d.call_type = 'Inbound'
+```
 
+## Theo thang
+
+```sql
+SELECT
+    DATE_TRUNC('month', d.call_start) AS month,
+    COUNT(DISTINCT a.call_id)::numeric / NULLIF(COUNT(DISTINCT d.call_id), 0) AS abandon_sys
+FROM distribution_call d
+LEFT JOIN abandoned_call a ON a.call_id = d.call_id
+WHERE d.call_type = 'Inbound'
+GROUP BY DATE_TRUNC('month', d.call_start)
+ORDER BY month
+```
+
+## Y nghia
+
+- Denominator: tong cuoc goi Inbound.
+- Numerator: cuoc goi co ban ghi trong abandoned_call.
+- Du lieu hien tai: ~400 abandoned / ~2800 inbound ≈ 14.3% abandon rate.

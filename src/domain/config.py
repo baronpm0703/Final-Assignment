@@ -51,15 +51,7 @@ class RouterConfig(BaseModel):
     llm_fallback_enabled: bool = True
 
 
-class OfflineQueryPlan(BaseModel):
-    name: str
-    match_keywords: list[str]
-    sql: str
-
-
 class AgentConfig(BaseModel):
-    business_question_keywords: list[str] = Field(default_factory=list)
-    offline_query_plans: list[OfflineQueryPlan] = Field(default_factory=list)
     max_react_iters: int = 8
     max_repeated_tool_calls: int = 2
 

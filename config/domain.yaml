@@ -22,6 +22,8 @@ schema:
     - round
     - sum
     - timestamp_trunc
+    - current_date
+    - now
   allowed_tables:
     distribution_call:
       columns:
@@ -39,14 +41,19 @@ schema:
         - hold_dur
         - call_dur
         - agent_disconnect
+      enums:
+        call_type: ["Inbound", "Outbound"]
+        queue: ["1", "2", "3", "4", "5"]
     call_log:
       columns:
-        - call_id
         - request_id
+        - call_id
         - request_code
         - create_date
         - create_agent
         - detail
+      enums:
+        request_code: ["YC_TL", "YC_DC", "YC_PAY", "YC_INFO"]
     request_code:
       columns:
         - code
@@ -57,16 +64,20 @@ schema:
         - agent_id
         - agent_name
         - agent_tl
+      enums:
+        agent_tl: ["TL_A", "TL_B", "TL_C", "TL_D"]
     abandoned_call:
       columns:
-        - call_id
         - abd_id
+        - call_id
         - abandoned_time
         - abandoned_type
         - waiting_dur
         - ring_dur
         - call_dur
         - agent_id
+      enums:
+        abandoned_type: ["Agent", "Busy", "InQueue"]
 
 router:
   intent_utterances_path: config/intent_utterances.json
@@ -76,87 +87,6 @@ router:
 agent:
   max_react_iters: 8
   max_repeated_tool_calls: 2
-  business_question_keywords:
-    - là gì
-    - la gi
-    - công thức
-    - cong thuc
-    - schema
-    - relationship
-    - quy trình
-    - quy trinh
-    - nghiệp vụ
-    - nghiep vu
-    - ý nghĩa
-    - y nghia
-  offline_query_plans:
-    - name: abandon_by_month
-      match_keywords:
-        - abandon
-        - abandoned
-      sql: |
-        SELECT
-            DATE_TRUNC('month', d.call_start) AS month,
-            COUNT(DISTINCT d.call_id) AS total_calls,
-            COUNT(DISTINCT a.call_id) AS abandoned_calls,
-            ROUND(
-                COUNT(DISTINCT a.call_id)::numeric
-                / NULLIF(COUNT(DISTINCT d.call_id), 0),
-                4
-            ) AS abandon_sys
-        FROM distribution_call d
-        LEFT JOIN abandoned_call a ON a.call_id = d.call_id
-        GROUP BY month
-        ORDER BY month
-        LIMIT 24
-    - name: request_mix
-      match_keywords:
-        - yeu cau
-        - yêu cầu
-        - request
-      sql: |
-        SELECT
-            r.name AS request_name,
-            COUNT(*) AS request_count,
-            ROUND(COUNT(*)::numeric / NULLIF(SUM(COUNT(*)) OVER (), 0), 4) AS share
-        FROM call_log l
-        JOIN distribution_call d ON d.call_id = l.call_id
-        JOIN request_code r ON r.code = l.request_code
-        WHERE d.call_type = 'Inbound'
-        GROUP BY r.name
-        ORDER BY request_count DESC
-        LIMIT 10
-    - name: agent_productivity
-      match_keywords:
-        - agent
-        - nang suat
-        - năng suất
-        - productivity
-      sql: |
-        SELECT
-            ag.agent_id,
-            ag.agent_name,
-            COUNT(d.call_id) AS handled_calls,
-            SUM(d.talk_dur + d.wrapup_dur) AS useful_seconds
-        FROM agent ag
-        JOIN distribution_call d ON d.agent_id = ag.agent_id
-        GROUP BY ag.agent_id, ag.agent_name
-        ORDER BY handled_calls DESC, useful_seconds DESC
-        LIMIT 10
-    - name: average_talk
-      match_keywords:
-        - talk
-        - dam thoai
-        - đàm thoại
-      sql: |
-        SELECT
-            ag.agent_name,
-            ROUND(AVG(d.talk_dur), 2) AS avg_talk_seconds
-        FROM distribution_call d
-        JOIN agent ag ON ag.agent_id = d.agent_id
-        GROUP BY ag.agent_name
-        ORDER BY avg_talk_seconds DESC
-        LIMIT 10
 
 response:
   clarification_options:
