@@ -96,7 +96,7 @@ class AgentScopeChatModel(ChatModelBase):
     ) -> AgentScopeChatResponse:
         chat_messages = self._to_chat_messages(messages)
         self.state.llm_calls += 1
-        logger.info(
+        logger.debug(
             "agentscope_llm_request",
             extra={
                 "run_id": self.state.run_id,
@@ -129,7 +129,7 @@ class AgentScopeChatModel(ChatModelBase):
                 tools=tools or [],
             )
         )
-        logger.info(
+        logger.debug(
             "agentscope_llm_response",
             extra={
                 "run_id": self.state.run_id,
@@ -173,12 +173,10 @@ class AgentScopeChatModel(ChatModelBase):
                     f"{self.state.repeated_tool_calls}:{tool_signature[:500]}"
                 )
                 logger.warning(
-                    "agentscope_repeated_tool_call_stopped",
+                    "agent_repeated_tool_stopped",
                     extra={
                         "run_id": self.state.run_id,
-                        "llm_call": self.state.llm_calls,
-                        "repeated_tool_calls": self.state.repeated_tool_calls,
-                        "tool_signature": tool_signature,
+                        "repeated_count": self.state.repeated_tool_calls,
                     },
                 )
                 return AgentScopeChatResponse(
@@ -285,15 +283,13 @@ class AgentScopeReActRunner:
     ) -> AgentScopeRunResult:
         state = AgentScopeToolState()
         logger.info(
-            "agentscope_run_start",
+            "agent_start",
             extra={
                 "run_id": state.run_id,
                 "intent": route.intent.value,
                 "language": route.language.value,
-                "max_iters": self.max_iters,
-                "max_repeated_tool_calls": self.max_repeated_tool_calls,
+                "model": self.llm_model,
                 "user_message": message,
-                "memory_context": memory_context,
             },
         )
         toolkit = Toolkit(
@@ -327,15 +323,13 @@ class AgentScopeReActRunner:
             "clarification_needed" if answer.startswith("Bạn muốn phân tích") else "answer"
         )
         logger.info(
-            "agentscope_run_end",
+            "agent_end",
             extra={
                 "run_id": state.run_id,
                 "response_type": response_type,
                 "llm_calls": state.llm_calls,
                 "tool_trace": state.tool_trace,
-                "sql_executed": state.sql_executed,
                 "row_count": len(state.rows),
-                "retrieved_chunk_count": len(state.retrieved_chunks),
                 "stopped_reason": state.stopped_reason,
             },
         )
@@ -385,13 +379,11 @@ class AgentScopeReActRunner:
                 f"Action: retrieve_knowledge | Observation: {len(chunks)} chunks"
             )
             logger.info(
-                "agentscope_tool_observation",
+                "tool_retrieve_knowledge",
                 extra={
                     "run_id": state.run_id,
-                    "tool": "retrieve_knowledge",
                     "query": query,
                     "chunk_count": len(chunks),
-                    "sources": [chunk.source for chunk in chunks],
                 },
             )
             return json.dumps(
@@ -421,11 +413,9 @@ class AgentScopeReActRunner:
             except Exception as exc:
                 state.tool_trace.append(f"Action: execute_sql | Observation: error {exc}")
                 logger.warning(
-                    "agentscope_tool_observation",
+                    "tool_execute_sql_error",
                     extra={
                         "run_id": state.run_id,
-                        "tool": "execute_sql",
-                        "sql": sql,
                         "error": str(exc),
                     },
                 )
@@ -435,13 +425,10 @@ class AgentScopeReActRunner:
             state.rows = rows
             state.tool_trace.append(f"Action: execute_sql | Observation: {len(rows)} rows")
             logger.info(
-                "agentscope_tool_observation",
+                "tool_execute_sql",
                 extra={
                     "run_id": state.run_id,
-                    "tool": "execute_sql",
-                    "sql": sql,
                     "row_count": len(rows),
-                    "rows_preview": rows[:3],
                 },
             )
             return json.dumps({"ok": True, "rows": rows}, ensure_ascii=False, default=str)
@@ -463,13 +450,10 @@ class AgentScopeReActRunner:
                 "Action: answer_business_question | Observation: knowledge answer"
             )
             logger.info(
-                "agentscope_tool_observation",
+                "tool_answer_business",
                 extra={
                     "run_id": state.run_id,
-                    "tool": "answer_business_question",
-                    "question": question,
                     "chunk_count": len(chunks),
-                    "answer": answer,
                 },
             )
             return answer

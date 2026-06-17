@@ -13,7 +13,13 @@ def main() -> None:
 
     import uvicorn
 
-    uvicorn.run("src.main:app", host=args.host, port=args.port, reload=True)
+    uvicorn.run(
+        "src.main:app",
+        host=args.host,
+        port=args.port,
+        reload=True,
+        log_level="warning",
+    )
 
 
 if __name__ == "__main__":

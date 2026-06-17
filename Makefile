@@ -25,7 +25,7 @@ format:
 	$(PYTHON) -m ruff check --fix .
 
 dev:
-	$(PYTHON) -m uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+	$(PYTHON) -m uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 --log-level warning
 
 docker-up:
 	docker compose up -d postgres
