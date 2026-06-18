@@ -4,6 +4,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+from queue import Queue
 
 from agentscope.agent import Agent, ReActConfig
 from agentscope.credential import CredentialBase
@@ -41,6 +42,7 @@ class AgentScopeRunResult:
 @dataclass
 class AgentScopeToolState:
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    event_queue: Queue = field(default_factory=Queue)
     llm_calls: int = 0
     retrieved_chunks: list[RetrievedChunk] = field(default_factory=list)
     sql_executed: str | None = None
@@ -50,6 +52,13 @@ class AgentScopeToolState:
     last_tool_signature: str | None = None
     repeated_tool_calls: int = 0
     stopped_reason: str | None = None
+    def emit(self, event_type: str, message: str):
+        self.event_queue.put(
+            {
+                "type": event_type,
+                "message": message,
+            }
+        )
 
 
 class AutoAllowFunctionTool(FunctionTool):
@@ -273,6 +282,41 @@ class AgentScopeReActRunner:
         return asyncio.run(
             self._run_async(message=message, route=route, memory_context=memory_context)
         )
+    
+    async def stream_run(
+        self,
+        *,
+        message: str,
+        route: IntentResult,
+        memory_context: str | None,
+    ):
+        """Stream run with status updates via async generator."""
+        state = AgentScopeToolState()
+        
+        async def run_agent():
+            return await self._run_async(
+                message=message,
+                route=route,
+                memory_context=memory_context,
+                state=state,
+            )
+        
+        task = asyncio.create_task(run_agent())
+        
+        # Stream status updates while agent is running
+        while not task.done():
+            while not state.event_queue.empty():
+                yield state.event_queue.get()
+            await asyncio.sleep(0.1)
+        
+        # Get final result
+        result = await task
+        yield {
+            "type": "result",
+            "answer": result.answer,
+            "sql_executed": result.sql_executed,
+            "reasoning_steps": result.reasoning_steps,
+        }
 
     async def _run_async(
         self,
@@ -280,8 +324,10 @@ class AgentScopeReActRunner:
         message: str,
         route: IntentResult,
         memory_context: str | None,
+        state: AgentScopeToolState | None = None,
     ) -> AgentScopeRunResult:
-        state = AgentScopeToolState()
+        if state is None:
+            state = AgentScopeToolState()
         logger.info(
             "agent_start",
             extra={
@@ -316,8 +362,10 @@ class AgentScopeReActRunner:
             "agentscope_user_prompt",
             extra={"run_id": state.run_id, "prompt": prompt},
         )
+        state.emit("status", "Running ReAct agent...")
         final_msg = await agent.reply(UserMsg("user", prompt))
         answer = final_msg.get_text_content() or "Không tạo được câu trả lời."
+        state.emit("status", "Processing response...")
 
         response_type = (
             "clarification_needed" if answer.startswith("Bạn muốn phân tích") else "answer"
@@ -373,6 +421,7 @@ class AgentScopeReActRunner:
             Args:
                 query: User question or focused retrieval query.
             """
+            state.emit("status", f"Retrieving knowledge: {query[:50]}")
             chunks = self.knowledge_service.retrieve(query, limit=5)
             state.retrieved_chunks = chunks
             state.tool_trace.append(
@@ -408,10 +457,12 @@ class AgentScopeReActRunner:
             Args:
                 sql: A single SELECT query with explicit LIMIT.
             """
+            state.emit("status", "Executing SQL query...")
             try:
                 rows = self.database.execute_select(sql)
             except Exception as exc:
                 state.tool_trace.append(f"Action: execute_sql | Observation: error {exc}")
+                state.emit("status", f"SQL error: {str(exc)[:100]}")
                 logger.warning(
                     "tool_execute_sql_error",
                     extra={
@@ -424,6 +475,7 @@ class AgentScopeReActRunner:
             state.sql_executed = sql
             state.rows = rows
             state.tool_trace.append(f"Action: execute_sql | Observation: {len(rows)} rows")
+            state.emit("status", f"Query returned {len(rows)} rows")
             logger.info(
                 "tool_execute_sql",
                 extra={
@@ -442,6 +494,7 @@ class AgentScopeReActRunner:
             Args:
                 question: Business, schema, process, or KPI-definition question.
             """
+            state.emit("status", "Searching knowledge base...")
             chunks = state.retrieved_chunks or self.knowledge_service.retrieve(question, limit=5)
             state.retrieved_chunks = chunks
             answer = synthesize_answer_from_chunks(chunks)
@@ -449,6 +502,7 @@ class AgentScopeReActRunner:
             state.tool_trace.append(
                 "Action: answer_business_question | Observation: knowledge answer"
             )
+            state.emit("status", "Answer generated from knowledge")
             logger.info(
                 "tool_answer_business",
                 extra={

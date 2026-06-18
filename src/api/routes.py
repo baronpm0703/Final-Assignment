@@ -1,6 +1,8 @@
 import uuid
+import json
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from src.api.models import (
     ChatRequest,
@@ -107,3 +109,34 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 
     memory.append(payload.conversation_id, "assistant", response.answer)
     return ChatResponse(**response.to_dict())
+
+
+@router.post("/chat/stream")
+async def chat_stream(payload: ChatRequest, request: Request):
+    """Stream chat response with status updates (SSE)."""
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail=ErrorCode.CHAT_EMPTY_MESSAGE.value)
+
+    memory = request.app.state.memory
+    agent = request.app.state.agent
+    
+    memory.append(payload.conversation_id, "user", message)
+    memory_context = memory.build_context(payload.conversation_id).render()
+
+    async def event_generator():
+        # Lấy route intent trước
+        route = agent.router.route(message)
+        
+        # Stream tất cả events từ agent
+        async for event in agent.stream_answer(
+            message=message,
+            memory_context=memory_context,
+        ):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            
+            # Lưu assistant response khi kết thúc
+            if event.get("type") == "result":
+                memory.append(payload.conversation_id, "assistant", event.get("answer", ""))
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

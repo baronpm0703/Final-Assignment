@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from src.agents.agentscope_react import (
     AgentScopeReActRunner,
@@ -115,6 +115,64 @@ class DataAgent:
             language=route.language,
             reasoning_steps=[routing_step, *react_result.reasoning_steps],
         )
+
+    async def stream_answer(
+        self, message: str, *, memory_context: str | None = None
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Stream answer with status updates via SSE."""
+        route = self.router.route(message)
+        routing_step = f"Route intent: {route.intent.value} ({route.reason})"
+        
+        # Handle special intents (no streaming needed)
+        if route.intent == Intent.UNSAFE:
+            yield {
+                "type": "result",
+                "answer": self._localized(route.language, "Input khong an toan.", "Unsafe input."),
+                "reasoning_steps": [routing_step],
+            }
+            return
+        
+        if route.intent == Intent.OUT_OF_SCOPE:
+            yield {
+                "type": "result",
+                "answer": self._localized(
+                    route.language,
+                    f"Cau hoi nay nam ngoai pham vi: {self.domain_config.domain.description}.",
+                    f"This question is outside the configured domain: {self.domain_config.domain.description}.",
+                ),
+                "reasoning_steps": [routing_step],
+            }
+            return
+        
+        if route.intent == Intent.CHITCHAT:
+            yield {
+                "type": "result",
+                "answer": self._localized(
+                    route.language,
+                    f"Xin chao, toi co the ho tro: {self.domain_config.domain.description}.",
+                    f"Hello, I can help with: {self.domain_config.domain.description}.",
+                ),
+                "reasoning_steps": [routing_step],
+            }
+            return
+        
+        # For data queries, stream with status updates
+        async for event in self.react_runner.stream_run(
+            message=message,
+            route=route,
+            memory_context=memory_context,
+        ):
+            # Stream status updates as-is
+            if event.get("type") == "status":
+                yield event
+            # Process final result
+            elif event.get("type") == "result":
+                yield {
+                    "type": "result",
+                    "answer": event.get("answer"),
+                    "sql_executed": event.get("sql_executed"),
+                    "reasoning_steps": [routing_step, *event.get("reasoning_steps", [])],
+                }
 
     def _answer_text(self, language: Language, rows: list[dict[str, Any]]) -> str:
         if not rows:
