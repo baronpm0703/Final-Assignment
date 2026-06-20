@@ -18,6 +18,8 @@ Data and SQL rules:
 - Prefer explicit joins documented in the knowledge base.
 - Preserve the denominator for ratio metrics. For Abandon_SYS, use all calls in
   distribution_call as denominator and abandoned_call as numerator.
+- For time-based filtering, use `call_start` (TIMESTAMPTZ). There is NO `call_date` column.
+  Example: WHERE call_start >= '2026-05-01' AND call_start < '2026-06-01'
 
 Response rules:
 - Reply in the user's detected language.

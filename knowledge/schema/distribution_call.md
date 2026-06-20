@@ -24,6 +24,8 @@ Luu y:
 - Pham vi thoi gian: 2026-01-01 den 2026-05-19.
 - Queue chi co gia tri voi cuoc goi Inbound, NULL voi Outbound.
 - 30 agent (A001-A030) chia cho 4 team leader (TL_A, TL_B, TL_C, TL_D).
+- **KHONG co cot `call_date`**. Khi filter theo ngay/thang/nam, dung `call_start`.
+  Vi du: `WHERE call_start >= '2026-05-01' AND call_start < '2026-06-01'`
 
 Dung bang nay lam denominator cho tong so cuoc goi, SLA20, average talk time,
 agent productivity va cac chi so hieu suat.
