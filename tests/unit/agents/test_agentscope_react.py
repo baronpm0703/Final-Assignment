@@ -1,6 +1,7 @@
 from agentscope.agent import Agent
+from agentscope.message import Msg, TextBlock
 
-from src.agents.agentscope_react import AgentScopeReActRunner
+from src.agents.agentscope_react import AgentScopeReActRunner, _extract_msg_text
 from src.domain.config import get_domain_config
 from src.domain.intent import Intent, IntentResult, Language
 from src.infrastructure.llm.ports import ChatRequest, ChatResponse, ToolCall
@@ -87,6 +88,42 @@ class RepeatingToolLlm:
 def test_runner_uses_agentscope_framework() -> None:
     assert AgentScopeReActRunner.framework_name == "AgentScope"
     assert Agent.__module__.startswith("agentscope.")
+
+
+def test_extract_msg_text_unwraps_text_block_repr() -> None:
+    msg = Msg(
+        name="assistant",
+        role="assistant",
+        content=[
+            TextBlock(
+                text=(
+                    "[TextBlock(type='text', text='Tổng số cuộc gọi inbound là 2.800.', "
+                    "id='77855555555555555555555555555555')]"
+                )
+            )
+        ],
+    )
+
+    assert _extract_msg_text(msg) == "Tổng số cuộc gọi inbound là 2.800."
+
+
+def test_extract_msg_text_normalizes_escaped_markdown_newlines() -> None:
+    msg = Msg(
+        name="assistant",
+        role="assistant",
+        content=[
+            TextBlock(
+                text=(
+                    "Kết quả:\\n\\n- **Tháng 2/2026:** 12.96%\\n\\n"
+                    "```sql\\nSELECT 1;\\n```"
+                )
+            )
+        ],
+    )
+
+    assert _extract_msg_text(msg) == (
+        "Kết quả:\n\n- **Tháng 2/2026:** 12.96%\n\n```sql\nSELECT 1;\n```"
+    )
 
 
 def test_runner_executes_agentscope_react_tools() -> None:

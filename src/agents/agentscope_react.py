@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from queue import Queue
@@ -27,6 +28,39 @@ from src.infrastructure.llm.ports import (
 from src.rag.knowledge_service import KnowledgeService, RetrievedChunk
 
 logger = logging.getLogger(__name__)
+
+
+_TEXT_BLOCK_REPR_PATTERN = re.compile(
+    r"^\[?TextBlock\(type='text', text='(?P<text>.*)', id='[^']+'\)\]?$",
+    re.DOTALL,
+)
+
+
+def _normalize_agent_text(text: str) -> str:
+    match = _TEXT_BLOCK_REPR_PATTERN.match(text.strip())
+    if match:
+        text = match.group("text")
+    return (
+        text.replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\t", "\t")
+        .replace("\\'", "'")
+        .replace('\\"', '"')
+    )
+
+
+def _extract_msg_text(message: Msg) -> str:
+    chunks: list[str] = []
+    for block in message.content:
+        if isinstance(block, TextBlock):
+            chunks.append(_normalize_agent_text(block.text))
+        elif isinstance(block, ToolResultBlock):
+            chunks.append(str(block.output))
+        elif isinstance(block, str):
+            chunks.append(_normalize_agent_text(block))
+        elif hasattr(block, "text"):
+            chunks.append(_normalize_agent_text(str(block.text)))
+    return "\n".join(chunk for chunk in chunks if chunk)
 
 
 @dataclass
@@ -238,13 +272,7 @@ class AgentScopeChatModel(ChatModelBase):
         return ""
 
     def _message_text(self, message: Msg) -> str:
-        chunks: list[str] = []
-        for block in message.content:
-            if isinstance(block, TextBlock):
-                chunks.append(block.text)
-            elif isinstance(block, ToolResultBlock):
-                chunks.append(str(block.output))
-        return "\n".join(chunks)
+        return _extract_msg_text(message)
 
 
 class AgentScopeReActRunner:
@@ -367,7 +395,7 @@ class AgentScopeReActRunner:
         )
         state.emit("status", "Running ReAct agent...")
         final_msg = await agent.reply(UserMsg("user", prompt))
-        answer = final_msg.get_text_content() or "Không tạo được câu trả lời."
+        answer = _extract_msg_text(final_msg) or "Không tạo được câu trả lời."
         state.emit("status", "Processing response...")
 
         response_type = (
