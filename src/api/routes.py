@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
-
+from fastapi.encoders import jsonable_encoder
 from src.api.models import (
     ChatRequest,
     ChatResponse,
@@ -150,6 +150,12 @@ async def chat_stream(payload: ChatRequest, request: Request):
             message=message,
             memory_context=memory_context,
         ):
+            encoded_event = jsonable_encoder(event)
+
+            yield f"data: {json.dumps(encoded_event, ensure_ascii=False)}\n\n"
+            # yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            
+            # Lưu assistant response khi kết thúc
             if event.get("type") == "result":
                 event = {**event, "conversation_id": conversation_id}
                 memory.append(conversation_id, "assistant", event.get("answer", ""))
