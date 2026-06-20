@@ -309,6 +309,10 @@ class AgentScopeReActRunner:
                 yield state.event_queue.get()
             await asyncio.sleep(0.1)
         
+        # Drain remaining events after task completes
+        while not state.event_queue.empty():
+            yield state.event_queue.get()
+        
         # Get final result
         result = await task
         yield {
@@ -316,6 +320,7 @@ class AgentScopeReActRunner:
             "answer": result.answer,
             "sql_executed": result.sql_executed,
             "reasoning_steps": result.reasoning_steps,
+            "rows": result.rows,
         }
 
     async def _run_async(
@@ -384,10 +389,6 @@ class AgentScopeReActRunner:
         return AgentScopeRunResult(
             answer=state.business_answer or answer,
             reasoning_steps=[
-                (
-                    "AgentScope ReAct loop used "
-                    f"with max_iters={self.max_iters}, llm_calls={state.llm_calls}"
-                ),
                 *([f"Stopped reason: {state.stopped_reason}"] if state.stopped_reason else []),
                 *state.tool_trace,
             ],

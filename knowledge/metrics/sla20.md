@@ -38,6 +38,20 @@ GROUP BY DATE_TRUNC('month', call_start)
 ORDER BY month
 ```
 
+## Filter theo khoang thoi gian (vi du: thang 5/2026)
+
+```sql
+SELECT
+    COUNT(CASE WHEN waiting_queue_dur + ring_dur <= 20 THEN 1 END)::numeric
+    / NULLIF(COUNT(*), 0) AS sla20
+FROM distribution_call
+WHERE call_type = 'Inbound'
+  AND call_start >= '2026-05-01' AND call_start < '2026-06-01'
+LIMIT 1
+```
+
+Luu y: Dung `call_start` de filter theo thoi gian (KHONG co cot `call_date`).
+
 ## Y nghia
 
 - Numerator: cuoc goi co tong `waiting_queue_dur + ring_dur <= 20`.

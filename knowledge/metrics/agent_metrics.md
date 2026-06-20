@@ -14,6 +14,20 @@ GROUP BY a.agent_name, a.agent_tl
 ORDER BY total_calls DESC
 ```
 
+Filter theo thoi gian: dung `d.call_start` (KHONG co cot `call_date`).
+
+```sql
+SELECT a.agent_name, a.agent_tl,
+    COUNT(d.call_id) AS total_calls
+FROM distribution_call d
+JOIN agent a ON a.agent_id = d.agent_id
+WHERE d.call_type = 'Inbound'
+  AND d.call_start >= '2026-05-01' AND d.call_start < '2026-06-01'
+GROUP BY a.agent_name, a.agent_tl
+ORDER BY total_calls DESC
+LIMIT 30
+```
+
 ## Agent_Time (Thoi gian huu ich)
 
 Tong thoi gian agent lam viec huu ich: talk + wrapup.

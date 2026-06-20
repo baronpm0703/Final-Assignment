@@ -24,6 +24,8 @@ schema:
     - timestamp_trunc
     - current_date
     - now
+    - case
+    - if
   allowed_tables:
     distribution_call:
       columns:

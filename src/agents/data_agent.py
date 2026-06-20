@@ -167,12 +167,24 @@ class DataAgent:
                 yield event
             # Process final result
             elif event.get("type") == "result":
-                yield {
+                result_event = {
                     "type": "result",
                     "answer": event.get("answer"),
                     "sql_executed": event.get("sql_executed"),
                     "reasoning_steps": [routing_step, *event.get("reasoning_steps", [])],
                 }
+                
+                # Add visualization if SQL was executed and rows exist
+                rows = event.get("rows", [])
+                if event.get("sql_executed") and rows:
+                    viz_type, viz_title = infer_visualization_from_rows(rows)
+                    result_event["visualization"] = {
+                        "type": viz_type,
+                        "title": viz_title,
+                        "data": rows,
+                    }
+                
+                yield result_event
 
     def _answer_text(self, language: Language, rows: list[dict[str, Any]]) -> str:
         if not rows:
