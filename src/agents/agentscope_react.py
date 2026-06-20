@@ -3,8 +3,8 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
 from queue import Queue
+from typing import Any
 
 from agentscope.agent import Agent, ReActConfig
 from agentscope.credential import CredentialBase
@@ -47,7 +47,6 @@ class AgentScopeToolState:
     retrieved_chunks: list[RetrievedChunk] = field(default_factory=list)
     sql_executed: str | None = None
     rows: list[dict[str, Any]] = field(default_factory=list)
-    business_answer: str | None = None
     tool_trace: list[str] = field(default_factory=list)
     last_tool_signature: str | None = None
     repeated_tool_calls: int = 0
@@ -347,7 +346,6 @@ class AgentScopeReActRunner:
             tools=[
                 AutoAllowFunctionTool(self._retrieve_knowledge_tool(state)),
                 AutoAllowFunctionTool(self._execute_sql_tool(state)),
-                AutoAllowFunctionTool(self._answer_business_question_tool(state)),
             ]
         )
         agent = Agent(
@@ -387,7 +385,7 @@ class AgentScopeReActRunner:
             },
         )
         return AgentScopeRunResult(
-            answer=state.business_answer or answer,
+            answer=answer,
             reasoning_steps=[
                 *([f"Stopped reason: {state.stopped_reason}"] if state.stopped_reason else []),
                 *state.tool_trace,
@@ -487,40 +485,6 @@ class AgentScopeReActRunner:
             return json.dumps({"ok": True, "rows": rows}, ensure_ascii=False, default=str)
 
         return execute_sql
-
-    def _answer_business_question_tool(self, state: AgentScopeToolState):
-        def answer_business_question(question: str) -> str:
-            """Answer a domain business/schema/metric question from knowledge only.
-
-            Args:
-                question: Business, schema, process, or KPI-definition question.
-            """
-            state.emit("status", "Searching knowledge base...")
-            chunks = state.retrieved_chunks or self.knowledge_service.retrieve(question, limit=5)
-            state.retrieved_chunks = chunks
-            answer = synthesize_answer_from_chunks(chunks)
-            state.business_answer = answer
-            state.tool_trace.append(
-                "Action: answer_business_question | Observation: knowledge answer"
-            )
-            state.emit("status", "Answer generated from knowledge")
-            logger.info(
-                "tool_answer_business",
-                extra={
-                    "run_id": state.run_id,
-                    "chunk_count": len(chunks),
-                },
-            )
-            return answer
-
-        return answer_business_question
-
-
-def synthesize_answer_from_chunks(chunks: list[RetrievedChunk]) -> str:
-    if chunks:
-        top = chunks[0]
-        return f"Theo knowledge base ({top.title}), {top.content[:500]}"
-    return "Tôi chưa tìm thấy knowledge phù hợp cho câu hỏi này."
 
 
 def infer_visualization_from_rows(rows: list[dict[str, Any]]) -> tuple[str, str]:
