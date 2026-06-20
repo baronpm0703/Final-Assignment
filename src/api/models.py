@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
-    conversation_id: str = "default"
+    conversation_id: str | None = None
 
 
 class VisualizationModel(BaseModel):
@@ -18,6 +18,7 @@ class ChatResponse(BaseModel):
     type: str
     answer: str
     language: str
+    conversation_id: str
     visualization: VisualizationModel | None = None
     sql_executed: str | None = None
     reasoning_steps: list[str]
