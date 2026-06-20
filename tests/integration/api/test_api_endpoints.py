@@ -105,3 +105,20 @@ def test_stream_chat_returns_conversation_id_and_keeps_follow_up_context() -> No
     assert "user: First question" in (agent.memory_contexts[1] or "")
     assert "assistant: received: First question" in (agent.memory_contexts[1] or "")
     assert "user: Follow up question" in (agent.memory_contexts[1] or "")
+
+
+def test_stream_chat_keeps_default_follow_up_context_without_client_session_id() -> None:
+    agent = FakeAgent()
+    client = make_client(agent=agent)
+
+    first_response = client.post("/api/chat/stream", json={"message": "First question"})
+    second_response = client.post("/api/chat/stream", json={"message": "Follow up question"})
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert parse_sse_events(first_response)[0]["conversation_id"] == "default"
+    assert parse_sse_events(second_response)[0]["conversation_id"] == "default"
+    assert len(agent.memory_contexts) == 2
+    assert "user: First question" in (agent.memory_contexts[1] or "")
+    assert "assistant: received: First question" in (agent.memory_contexts[1] or "")
+    assert "user: Follow up question" in (agent.memory_contexts[1] or "")

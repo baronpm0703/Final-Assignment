@@ -22,14 +22,9 @@ router = APIRouter(prefix="/api")
 
 
 def _resolve_conversation_id(memory, conversation_id: str | None) -> str:
-    normalized = (conversation_id or "").strip()
-    if normalized:
-        memory.create(normalized)
-        return normalized
-
-    generated = uuid.uuid4().hex[:16]
-    memory.create(generated)
-    return generated
+    resolved = (conversation_id or "").strip() or "default"
+    memory.create(resolved)
+    return resolved
 
 
 def _sse_data(event: dict) -> str:
