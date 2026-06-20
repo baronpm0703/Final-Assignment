@@ -1,7 +1,16 @@
+from __future__ import annotations
+
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from src.rag.embedder import HashingEmbedder, cosine_similarity
+from src.rag.embedder import Embedder, HashingEmbedder, cosine_similarity
+
+if TYPE_CHECKING:
+    pass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -26,23 +35,38 @@ class MarkdownKnowledgeLoader:
         self.chunk_size = chunk_size
         self.overlap = overlap
 
-    def load(self, embedder: HashingEmbedder) -> list[KnowledgeChunk]:
-        chunks: list[KnowledgeChunk] = []
+    def load(self, embedder: Embedder) -> list[KnowledgeChunk]:
+        """Load and embed all markdown files. Uses batch embedding when available."""
+        raw_chunks: list[tuple[str, str, str]] = []  # (source, title, content)
         for path in sorted(self.root.rglob("*.md")):
             text = path.read_text(encoding="utf-8").strip()
             if not text:
                 continue
             title = self._title(text, path)
             for content in self._chunk_text(text):
-                chunks.append(
-                    KnowledgeChunk(
-                        source=str(path.relative_to(self.root)),
-                        title=title,
-                        content=content,
-                        embedding=embedder.embed(content),
-                    )
-                )
-        return chunks
+                raw_chunks.append((str(path.relative_to(self.root)), title, content))
+
+        if not raw_chunks:
+            return []
+
+        # Use batch embedding if available (OpenAIEmbedder) for efficiency
+        contents = [content for _, _, content in raw_chunks]
+        if hasattr(embedder, "embed_batch"):
+            logger.info("Embedding %d chunks via batch API...", len(contents))
+            embeddings = embedder.embed_batch(contents)
+        else:
+            logger.info("Embedding %d chunks one-by-one...", len(contents))
+            embeddings = [embedder.embed(content) for content in contents]
+
+        return [
+            KnowledgeChunk(
+                source=source,
+                title=title,
+                content=content,
+                embedding=embedding,
+            )
+            for (source, title, content), embedding in zip(raw_chunks, embeddings, strict=True)
+        ]
 
     def _title(self, text: str, path: Path) -> str:
         first_line = text.splitlines()[0].strip()
@@ -107,15 +131,33 @@ class InMemoryKnowledgeStore:
 
 
 class KnowledgeService:
-    def __init__(self, embedder: HashingEmbedder, store: InMemoryKnowledgeStore) -> None:
+    def __init__(self, embedder: Embedder, store: InMemoryKnowledgeStore) -> None:
         self.embedder = embedder
         self.store = store
 
     @classmethod
-    def from_markdown(cls, root: Path | None = None) -> "KnowledgeService":
+    def from_markdown(
+        cls,
+        root: Path | None = None,
+        *,
+        embedder: Embedder | None = None,
+    ) -> KnowledgeService:
+        """Build KnowledgeService from markdown files.
+
+        Args:
+            root: Path to knowledge directory. Defaults to "knowledge".
+            embedder: Embedder instance. Defaults to HashingEmbedder (offline).
+                      Pass OpenAIEmbedder for higher-quality semantic search.
+        """
         root = root or Path("knowledge")
-        embedder = HashingEmbedder()
+        embedder = embedder or HashingEmbedder()
         chunks = MarkdownKnowledgeLoader(root).load(embedder)
+        logger.info(
+            "KnowledgeService loaded: %d chunks, embedder=%s, dimensions=%d",
+            len(chunks),
+            type(embedder).__name__,
+            embedder.dimensions,
+        )
         return cls(embedder=embedder, store=InMemoryKnowledgeStore(chunks))
 
     def retrieve(self, query: str, *, limit: int = 5) -> list[RetrievedChunk]:

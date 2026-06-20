@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     gemini_api_key: str | None = None
 
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dimensions: int = 1536
+
     memory_window_size: int = 6
     memory_compaction_ratio: float = 0.70
     memory_summary_ratio: float = 0.70

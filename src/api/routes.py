@@ -1,7 +1,8 @@
-import uuid
 import json
+import uuid
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from src.api.models import (
@@ -18,6 +19,16 @@ from src.core.errors import AppError, ErrorCode
 from src.domain.response import AgentResponse
 
 router = APIRouter(prefix="/api")
+
+
+def _resolve_conversation_id(memory, conversation_id: str | None) -> str:
+    resolved = (conversation_id or "").strip() or "default"
+    memory.create(resolved)
+    return resolved
+
+
+def _sse_data(event: dict) -> str:
+    return f"data: {json.dumps(jsonable_encoder(event), ensure_ascii=False)}\n\n"
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -58,8 +69,13 @@ def list_conversations(request: Request) -> ConversationListResponse:
     return ConversationListResponse(conversations=memory.list_conversations())
 
 
-@router.get("/conversations/{conversation_id}/messages", response_model=ConversationMessagesResponse)
-def get_conversation_messages(conversation_id: str, request: Request) -> ConversationMessagesResponse:
+@router.get(
+    "/conversations/{conversation_id}/messages",
+    response_model=ConversationMessagesResponse,
+)
+def get_conversation_messages(
+    conversation_id: str, request: Request
+) -> ConversationMessagesResponse:
     """Get the message history for a conversation."""
     memory = request.app.state.memory
     if not memory.exists(conversation_id):
@@ -97,8 +113,9 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
 
     memory = request.app.state.memory
     agent = request.app.state.agent
-    memory.append(payload.conversation_id, "user", message)
-    memory_context = memory.build_context(payload.conversation_id).render()
+    conversation_id = _resolve_conversation_id(memory, payload.conversation_id)
+    memory.append(conversation_id, "user", message)
+    memory_context = memory.build_context(conversation_id).render()
 
     try:
         response: AgentResponse = agent.answer(message, memory_context=memory_context)
@@ -107,8 +124,8 @@ def chat(payload: ChatRequest, request: Request) -> ChatResponse:
             status_code=400, detail={"code": exc.code, "message": exc.message}
         ) from exc
 
-    memory.append(payload.conversation_id, "assistant", response.answer)
-    return ChatResponse(**response.to_dict())
+    memory.append(conversation_id, "assistant", response.answer)
+    return ChatResponse(conversation_id=conversation_id, **response.to_dict())
 
 
 @router.post("/chat/stream")
@@ -120,15 +137,15 @@ async def chat_stream(payload: ChatRequest, request: Request):
 
     memory = request.app.state.memory
     agent = request.app.state.agent
-    
-    memory.append(payload.conversation_id, "user", message)
-    memory_context = memory.build_context(payload.conversation_id).render()
+    conversation_id = _resolve_conversation_id(memory, payload.conversation_id)
+
+    memory.append(conversation_id, "user", message)
+    memory_context = memory.build_context(conversation_id).render()
 
     async def event_generator():
-        # Lấy route intent trước
-        route = agent.router.route(message)
-        
-        # Stream tất cả events từ agent
+        metadata = {"type": "metadata", "conversation_id": conversation_id}
+        yield _sse_data(metadata)
+
         async for event in agent.stream_answer(
             message=message,
             memory_context=memory_context,
@@ -140,6 +157,9 @@ async def chat_stream(payload: ChatRequest, request: Request):
             
             # Lưu assistant response khi kết thúc
             if event.get("type") == "result":
-                memory.append(payload.conversation_id, "assistant", event.get("answer", ""))
+                event = {**event, "conversation_id": conversation_id}
+                memory.append(conversation_id, "assistant", event.get("answer", ""))
+
+            yield _sse_data(event)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

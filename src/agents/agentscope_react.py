@@ -1,10 +1,11 @@
 import asyncio
 import json
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
 from queue import Queue
+from typing import Any
 
 from agentscope.agent import Agent, ReActConfig
 from agentscope.credential import CredentialBase
@@ -29,6 +30,39 @@ from src.rag.knowledge_service import KnowledgeService, RetrievedChunk
 logger = logging.getLogger(__name__)
 
 
+_TEXT_BLOCK_REPR_PATTERN = re.compile(
+    r"^\[?TextBlock\(type='text', text='(?P<text>.*)', id='[^']+'\)\]?$",
+    re.DOTALL,
+)
+
+
+def _normalize_agent_text(text: str) -> str:
+    match = _TEXT_BLOCK_REPR_PATTERN.match(text.strip())
+    if match:
+        text = match.group("text")
+    return (
+        text.replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\t", "\t")
+        .replace("\\'", "'")
+        .replace('\\"', '"')
+    )
+
+
+def _extract_msg_text(message: Msg) -> str:
+    chunks: list[str] = []
+    for block in message.content:
+        if isinstance(block, TextBlock):
+            chunks.append(_normalize_agent_text(block.text))
+        elif isinstance(block, ToolResultBlock):
+            chunks.append(str(block.output))
+        elif isinstance(block, str):
+            chunks.append(_normalize_agent_text(block))
+        elif hasattr(block, "text"):
+            chunks.append(_normalize_agent_text(str(block.text)))
+    return "\n".join(chunk for chunk in chunks if chunk)
+
+
 @dataclass
 class AgentScopeRunResult:
     answer: str
@@ -47,7 +81,6 @@ class AgentScopeToolState:
     retrieved_chunks: list[RetrievedChunk] = field(default_factory=list)
     sql_executed: str | None = None
     rows: list[dict[str, Any]] = field(default_factory=list)
-    business_answer: str | None = None
     tool_trace: list[str] = field(default_factory=list)
     last_tool_signature: str | None = None
     repeated_tool_calls: int = 0
@@ -239,13 +272,7 @@ class AgentScopeChatModel(ChatModelBase):
         return ""
 
     def _message_text(self, message: Msg) -> str:
-        chunks: list[str] = []
-        for block in message.content:
-            if isinstance(block, TextBlock):
-                chunks.append(block.text)
-            elif isinstance(block, ToolResultBlock):
-                chunks.append(str(block.output))
-        return "\n".join(chunks)
+        return _extract_msg_text(message)
 
 
 class AgentScopeReActRunner:
@@ -347,7 +374,6 @@ class AgentScopeReActRunner:
             tools=[
                 AutoAllowFunctionTool(self._retrieve_knowledge_tool(state)),
                 AutoAllowFunctionTool(self._execute_sql_tool(state)),
-                AutoAllowFunctionTool(self._answer_business_question_tool(state)),
             ]
         )
         agent = Agent(
@@ -369,7 +395,7 @@ class AgentScopeReActRunner:
         )
         state.emit("status", "Running ReAct agent...")
         final_msg = await agent.reply(UserMsg("user", prompt))
-        answer = final_msg.get_text_content() or "Không tạo được câu trả lời."
+        answer = _extract_msg_text(final_msg) or "Không tạo được câu trả lời."
         state.emit("status", "Processing response...")
 
         response_type = (
@@ -387,7 +413,7 @@ class AgentScopeReActRunner:
             },
         )
         return AgentScopeRunResult(
-            answer=state.business_answer or answer,
+            answer=answer,
             reasoning_steps=[
                 *([f"Stopped reason: {state.stopped_reason}"] if state.stopped_reason else []),
                 *state.tool_trace,
@@ -487,40 +513,6 @@ class AgentScopeReActRunner:
             return json.dumps({"ok": True, "rows": rows}, ensure_ascii=False, default=str)
 
         return execute_sql
-
-    def _answer_business_question_tool(self, state: AgentScopeToolState):
-        def answer_business_question(question: str) -> str:
-            """Answer a domain business/schema/metric question from knowledge only.
-
-            Args:
-                question: Business, schema, process, or KPI-definition question.
-            """
-            state.emit("status", "Searching knowledge base...")
-            chunks = state.retrieved_chunks or self.knowledge_service.retrieve(question, limit=5)
-            state.retrieved_chunks = chunks
-            answer = synthesize_answer_from_chunks(chunks)
-            state.business_answer = answer
-            state.tool_trace.append(
-                "Action: answer_business_question | Observation: knowledge answer"
-            )
-            state.emit("status", "Answer generated from knowledge")
-            logger.info(
-                "tool_answer_business",
-                extra={
-                    "run_id": state.run_id,
-                    "chunk_count": len(chunks),
-                },
-            )
-            return answer
-
-        return answer_business_question
-
-
-def synthesize_answer_from_chunks(chunks: list[RetrievedChunk]) -> str:
-    if chunks:
-        top = chunks[0]
-        return f"Theo knowledge base ({top.title}), {top.content[:500]}"
-    return "Tôi chưa tìm thấy knowledge phù hợp cho câu hỏi này."
 
 
 def infer_visualization_from_rows(rows: list[dict[str, Any]]) -> tuple[str, str]:

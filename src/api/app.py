@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 
 from src.agents.data_agent import DataAgent
@@ -9,15 +11,41 @@ from src.domain.config import DomainConfig, get_domain_config
 from src.infrastructure.database import Database
 from src.infrastructure.llm.registry import ProviderRegistry
 from src.memory.conversation_memory import ConversationMemory
+from src.rag.embedder import Embedder, HashingEmbedder, OpenAIEmbedder
 from src.rag.knowledge_service import KnowledgeService
 from src.router.intent_router import IntentRouter
+
+logger = logging.getLogger(__name__)
+
+
+def _build_embedder(settings: Settings) -> Embedder:
+    """Build the appropriate embedder based on settings.
+
+    Uses OpenAIEmbedder when an API key is available, falls back to HashingEmbedder.
+    """
+    if settings.openai_api_key:
+        logger.info(
+            "Using OpenAIEmbedder (model=%s, dimensions=%d)",
+            settings.embedding_model,
+            settings.embedding_dimensions,
+        )
+        return OpenAIEmbedder(
+            api_key=settings.openai_api_key,
+            model=settings.embedding_model,
+            dimensions=settings.embedding_dimensions,
+        )
+    logger.info("No OpenAI API key found, falling back to HashingEmbedder")
+    return HashingEmbedder()
 
 
 def build_default_agent(settings: Settings, domain_config: DomainConfig) -> DataAgent:
     llm = ProviderRegistry(settings).get_chat_provider(settings.llm_model)
+    embedder = _build_embedder(settings)
     return DataAgent(
         router=IntentRouter.default(domain_config, llm=llm, llm_model=settings.llm_model),
-        knowledge_service=KnowledgeService.from_markdown(domain_config.knowledge.root_path),
+        knowledge_service=KnowledgeService.from_markdown(
+            domain_config.knowledge.root_path, embedder=embedder
+        ),
         database=Database.from_settings(settings, domain_config),
         llm=llm,
         llm_model=settings.llm_model,
