@@ -87,8 +87,8 @@ router:
   llm_fallback_enabled: true
 
 agent:
-  max_react_iters: 8
-  max_repeated_tool_calls: 2
+  max_react_iters: 16
+  max_repeated_tool_calls: 4
 
 response:
   clarification_options:

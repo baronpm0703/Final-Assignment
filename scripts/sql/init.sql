@@ -92,6 +92,10 @@ CREATE INDEX IF NOT EXISTS idx_call_log_callid ON call_log(call_id);
 CREATE INDEX IF NOT EXISTS idx_call_log_create_date ON call_log(create_date);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at);
 
+-- HNSW index for fast approximate nearest-neighbor vector search (cosine distance)
+CREATE INDEX IF NOT EXISTS idx_kb_chunks_embedding_hnsw
+    ON kb_chunks USING hnsw (embedding vector_cosine_ops);
+
 -- ============================================================
 -- Seed data from AI_Reporting_Demo_Data_v3.xlsx
 -- ============================================================

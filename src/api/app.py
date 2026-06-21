@@ -38,14 +38,49 @@ def _build_embedder(settings: Settings) -> Embedder:
     return HashingEmbedder()
 
 
+def _build_knowledge_service(
+    settings: Settings, domain_config: DomainConfig, embedder: Embedder
+) -> KnowledgeService:
+    """Build knowledge service — pgvector if DB available, else in-memory fallback."""
+    try:
+        from src.infrastructure.database import create_database_engine
+        from src.infrastructure.vector_store import PgVectorKnowledgeStore
+
+        engine = create_database_engine(str(settings.database_url))
+        store = PgVectorKnowledgeStore(engine)
+
+        # Check if pgvector table has data
+        if store.count() > 0:
+            logger.info("Using PgVectorKnowledgeStore (%d chunks in DB)", store.count())
+            return KnowledgeService.from_pgvector(
+                engine=engine,
+                embedder=embedder,
+                knowledge_root=domain_config.knowledge.root_path,
+                dimensions=settings.embedding_dimensions,
+            )
+        else:
+            logger.info("pgvector table empty — auto-ingesting knowledge")
+            return KnowledgeService.from_pgvector(
+                engine=engine,
+                embedder=embedder,
+                knowledge_root=domain_config.knowledge.root_path,
+                dimensions=settings.embedding_dimensions,
+            )
+    except Exception as exc:
+        logger.warning(
+            "Failed to connect to pgvector, falling back to in-memory store: %s", exc
+        )
+        return KnowledgeService.from_markdown(
+            domain_config.knowledge.root_path, embedder=embedder
+        )
+
+
 def build_default_agent(settings: Settings, domain_config: DomainConfig) -> DataAgent:
     llm = ProviderRegistry(settings).get_chat_provider(settings.llm_model)
     embedder = _build_embedder(settings)
     return DataAgent(
         router=IntentRouter.default(domain_config, llm=llm, llm_model=settings.llm_model),
-        knowledge_service=KnowledgeService.from_markdown(
-            domain_config.knowledge.root_path, embedder=embedder
-        ),
+        knowledge_service=_build_knowledge_service(settings, domain_config, embedder),
         database=Database.from_settings(settings, domain_config),
         llm=llm,
         llm_model=settings.llm_model,

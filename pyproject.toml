@@ -7,6 +7,7 @@ dependencies = [
     "agentscope>=2.0.2",
     "fastapi>=0.115.0",
     "httpx>=0.28.0",
+    "pgvector>=0.4.2",
     "psycopg[binary]>=3.2.0",
     "pydantic-settings>=2.6.0",
     "python-json-logger>=2.0.7",
