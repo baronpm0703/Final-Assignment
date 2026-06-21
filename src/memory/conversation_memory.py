@@ -61,6 +61,11 @@ class ConversationMemory:
         """Create an empty conversation slot. Idempotent."""
         self._messages.setdefault(conversation_id, [])
 
+    def replace_messages(self, conversation_id: str, messages: list[ConversationMessage]) -> None:
+        """Replace runtime messages from persistent storage."""
+        self._messages[conversation_id] = list(messages)
+        self._summary_cache.pop(conversation_id, None)
+
     def list_conversations(self) -> list[str]:
         return list(self._messages.keys())
 

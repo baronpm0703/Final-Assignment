@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import FastAPI
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.agents.data_agent import DataAgent
 from src.agents.prompts import load_data_agent_system_prompt
@@ -8,9 +9,10 @@ from src.api.routes import router
 from src.core.config import Settings, get_settings
 from src.core.logging import configure_logging
 from src.domain.config import DomainConfig, get_domain_config
-from src.infrastructure.database import Database
+from src.infrastructure.database import Database, create_database_engine
 from src.infrastructure.llm.registry import ProviderRegistry
 from src.memory.conversation_memory import ConversationMemory
+from src.memory.conversation_store import ConversationStore
 from src.rag.embedder import Embedder, HashingEmbedder, OpenAIEmbedder
 from src.rag.knowledge_service import KnowledgeService
 from src.router.intent_router import IntentRouter
@@ -67,12 +69,8 @@ def _build_knowledge_service(
                 dimensions=settings.embedding_dimensions,
             )
     except Exception as exc:
-        logger.warning(
-            "Failed to connect to pgvector, falling back to in-memory store: %s", exc
-        )
-        return KnowledgeService.from_markdown(
-            domain_config.knowledge.root_path, embedder=embedder
-        )
+        logger.warning("Failed to connect to pgvector, falling back to in-memory store: %s", exc)
+        return KnowledgeService.from_markdown(domain_config.knowledge.root_path, embedder=embedder)
 
 
 def build_default_agent(settings: Settings, domain_config: DomainConfig) -> DataAgent:
@@ -89,11 +87,25 @@ def build_default_agent(settings: Settings, domain_config: DomainConfig) -> Data
     )
 
 
+def build_conversation_store(settings: Settings) -> ConversationStore | None:
+    try:
+        store = ConversationStore(create_database_engine(str(settings.database_url)))
+        store.ensure_schema()
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "Conversation persistence is unavailable, falling back to in-memory only: %s",
+            exc,
+        )
+        return None
+    return store
+
+
 def create_app(
     settings: Settings | None = None,
     *,
     agent: DataAgent | None = None,
     memory: ConversationMemory | None = None,
+    conversation_store: ConversationStore | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
@@ -107,6 +119,9 @@ def create_app(
         window_size=settings.memory_window_size,
         compaction_ratio=settings.memory_compaction_ratio,
         summary_ratio=settings.memory_summary_ratio,
+    )
+    app.state.conversation_store = (
+        conversation_store if conversation_store is not None else build_conversation_store(settings)
     )
     app.include_router(router)
     return app
