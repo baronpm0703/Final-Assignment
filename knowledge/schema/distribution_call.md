@@ -5,7 +5,7 @@ Bang `distribution_call` luu toan bo cuoc goi duoc he thong phan bo cho tong dai
 | Column             | Type        | Description                                      |
 |--------------------|-------------|--------------------------------------------------|
 | `call_id`          | TEXT (PK)   | Ma cuoc goi duy nhat (vd: '100001')              |
-| `calling_number`   | TEXT        | So dien thoai khach hang                         |
+| `calling_number`   | TEXT        | So dien thoai khach hang (**PII - SENSITIVE**)   |
 | `call_type`        | TEXT        | `'Inbound'` hoac `'Outbound'`                    |
 | `queue`            | TEXT (NULL) | Queue/line khach hang chon: '1'-'5', NULL voi Outbound |
 | `agent_id`         | TEXT (FK)   | Agent xu ly, join sang `agent.agent_id`           |
@@ -26,6 +26,9 @@ Luu y:
 - 30 agent (A001-A030) chia cho 4 team leader (TL_A, TL_B, TL_C, TL_D).
 - **KHONG co cot `call_date`**. Khi filter theo ngay/thang/nam, dung `call_start`.
   Vi du: `WHERE call_start >= '2026-05-01' AND call_start < '2026-06-01'`
+- **`calling_number` la PII (Personally Identifiable Information)**. Khong duoc hien thi
+  nguyen ban trong ket qua tra ve cho nguoi dung. Phai mask (vd: 0912***678).
+  Chi dung trong WHERE de filter, khong SELECT ra ngoai tru khi can thiet va phai mask.
 
 Dung bang nay lam denominator cho tong so cuoc goi, SLA20, average talk time,
 agent productivity va cac chi so hieu suat.
