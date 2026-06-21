@@ -47,6 +47,7 @@ class IntentRouter:
         language = detect_language(text)
         intent, confidence, reason = self.classifier.classify(text)
         if confidence < self.confidence_threshold and self.llm_classifier is not None:
+            print("Call llm-fallback")
             llm_result = self.llm_classifier.classify(text, heuristic_reason=reason)
             intent, confidence, reason = (
                 llm_result.intent,

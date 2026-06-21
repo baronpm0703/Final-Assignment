@@ -83,7 +83,7 @@ schema:
 
 router:
   intent_utterances_path: config/intent_utterances.json
-  bm25_confidence_threshold: 0.55
+  bm25_confidence_threshold: 0.8
   llm_fallback_enabled: true
 
 agent:

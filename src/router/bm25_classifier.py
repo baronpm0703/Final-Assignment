@@ -53,7 +53,7 @@ class BM25IntentClassifier:
             intent=self._labels[best_index],
             confidence=confidence,
             reason=(
-                f"bm25 score={best_score:.3f}; margin={best_score - second_score:.3f}; "
+                f"bm25 confidence={confidence:.3f}; "
                 f"matched={self._texts[best_index]!r}"
             ),
         )
